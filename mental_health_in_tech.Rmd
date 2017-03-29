@@ -33,6 +33,8 @@ Bearing the above limitations in mind and being cautious with our interpretation
 
 Please see the Final Remarks and  at the end of the document for more detail on these findings (as well as the actual exploratory analyses!)
 
+GitHub [repo](https://github.com/dnrichardson/osmi) of all relevant files.
+
 ## Load data
 
 Survey results were downloaded from [data.world](https://data.world/kittybot/osmi-mental-health-tech-2016) in `.csv` format. The file was downloaded on March 25, 2017.
@@ -648,6 +650,6 @@ I hope that these insights can be considered useful in some way. It would be nic
 
 Thank you!
 
-Feel free to reach me at [dalesan@gmail.com](dalesan@gmail.com) with any questions. I will place all my files into a github repository soon. 
+Feel free to reach me at [dalesan@gmail.com](dalesan@gmail.com) with any questions. All relevant files at located in a GitHub [repo](https://github.com/dnrichardson/osmi)
 
 
