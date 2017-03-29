@@ -1,0 +1,653 @@
+---
+title: "Coarse Analysis of OSMI: Mental Health Tech 2016 Survey Results"
+author: "Dale Richardson"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output: 
+  html_document: 
+    toc: true
+    keep_md: true
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Description
+
+[Open Sourcing Mental Illess (OSMI)](https://osmihelp.org) has an ongoing survey from 2016, which "aims to measure attitudes towards mental health in the tech workplace, and examine the frequency of mental health disorders among tech workers." The survey is conducted online at the OSMI website and the OSMI team intends to use these data to help drive awareness and improve conditions for individuals with mental illness in the IT workplace. 
+
+It should be noted that the survey may be prone to certain biases. The sample of respondents ($n = 1433$) was not obtained through any random sampling approach. Furthermore, as the survey is conducted online, voluntary response bias should also be considered - i.e., self-selected respondents may have a particular opinions/experiences that cause overrepresentation in the data. 
+
+Lastly, as this is an observational study with potential sampling biases present, it is important to remember that causality can not be inferred. The results of the survey may not be generalizable to the entire population of Tech/IT workers due to the lack of random sampling. 
+
+Bearing the above limitations in mind and being cautious with our interpretations, we can still use these data to glean some insight into the state of mental health in the tech workplace.
+
+## Coarse Highlights
+1. Female and Gender Queer respondents suffer more from mental health disorders than Males
+2. Being self-employed does not affect incidence mental health disorders
+3. Larger companies formally talk about mental health more often but don't take mental health issues seriously
+4. Designers suffer most from mental health disorders whereas Front-end Developers suffer least
+
+Please see the Final Remarks and  at the end of the document for more detail on these findings (as well as the actual exploratory analyses!)
+
+## Load data
+
+Survey results were downloaded from [data.world](https://data.world/kittybot/osmi-mental-health-tech-2016) in `.csv` format. The file was downloaded on March 25, 2017.
+
+```{r loading_data, message = FALSE}
+# load packages
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(plotly)
+library(wesanderson)
+set.seed(1000)
+
+# load dataset
+mental.health <- read.csv("~/Dropbox/Data4Democracy/mental_health_in_tech/mental-heath-in-tech-2016_20161114.csv", header = TRUE, stringsAsFactors = TRUE)
+
+# check structure
+#str(mental.health)
+```
+
+## Clean data
+
+The first major issue that needs to be fixed is the variable names. The variable names in the `.csv` file are the actual survey questions themselves, which are too long for easy handling. I will create new variable names based on my own abbreviations of the survey's questions. In time, I may add a correpondence table to cross-reference the original variable names to my abbreviated ones. 
+
+```{r clean_data}
+# create new variable names
+new.names <- c("self.employed", "num.employees", "tech.company", "tech.role", "mental.health.coverage", "mental.health.options", "mental.health.formally.discussed", "mental.health.resources", "anonymity.protected", "medical.leave", "mental.health.negative", "physical.health.negative", "mental.health.comfort.coworker", "mental.health.comfort.supervisor", "mental.health.taken.seriously", "coworker.negative.consequences", "private.med.coverage", "resources", "reveal.diagnosis.clients.or.business", "revealed.negative.consequences.CB", "reveal.diagnosis.coworkers", "revealed.negative.consequences.CW", "productivity.effected", "percentage", "previous.employer", "prevemp.mental.health.coverage", "prevemp.mental.health.options", "prevemp.mental.health.formally.discussed", "prevemp.mental.health.resources", "prevemp.anonymity.protected", "prevemp.mental.health.negative",
+               "prevemp.physical.health.negative", "prevemp.mental.health.coworker", "prevemp.mental.health.comfort.supervisor", "prevemp.mental.health.taken.seriously", "prevemp.coworker.negative.consequences", "mention.phsyical.issue.interview", "why.whynot.physical", "mention.mental.health.interview", "why.whynot.mental", "career.hurt", "viewed.negatively.by.coworkers", "share.with.family", "observed.poor.handling", "observations.lead.less.likely.to.reveal", "family.history", "ever.had.mental.disorder", "currently.have.mental.disorder", "if.yes.what", "if.maybe.what", "medical.prof.diagnosis", "what.conditions", "sought.prof.treatment", "treatment.affects.work", "no.treatment.affects.work", "age", "gender", "country.live", "US.state", "country.work", "state.work", "work.position", "remotely"  )
+
+# change names
+colnames(mental.health) <- new.names
+# check
+#str(mental.health)
+
+# what does gender variable look like?
+head(table(mental.health$gender))
+tail(table(mental.health$gender))
+
+# ok, we have some issues with gender that need to be cleaned up - see next section below
+
+# convert some factor variables to character
+mental.health$why.whynot.physical <- as.character(mental.health$why.whynot.physical)
+mental.health$why.whynot.mental <- as.character(mental.health$why.whynot.mental)
+mental.health$gender <- as.character(mental.health$gender)
+mental.health$work.position <- as.character(mental.health$work.position)
+
+# convert boolean to factor
+mental.health$self.employed <- as.factor(mental.health$self.employed)
+levels(mental.health$self.employed) <- c("No", "Yes")
+mental.health$tech.role <- as.factor(mental.health$tech.role)
+levels(mental.health$tech.role) <- c("No", "Yes")
+
+```
+
+### Cleaning up the gender variable
+The open-ended, free-form text response to gender on the survey will necessitate some data cleaning. There are several non-standard responses, i.e. *"Unicorn"* and *"I'm a man why didn't you make this a drop down question. You should of asked sex? And I would of answered yes please. Seriously how much text can this take?"* Other types of responses included some variants of being Gender Queer, non-binary, etc. 
+
+If someone responded as transgender, I have coded their gender as `TG`. If someone responded with a variation of being Gender Queer, i.e. "gender fluid", "human", "androgenous", I have coded their gender as `GQ`. Otherwise, gender has been encoded as either `M` or `F`, unless the field was left blank (`NA`) or the survey participant refused to answer (`Refused`). 
+
+```{r clean-gender}
+# let's try to standardize responses
+mental.health[mental.health$gender == "Male", "gender"] <- "M"
+mental.health[mental.health$gender == "male", "gender"] <- "M"
+mental.health[mental.health$gender == "MALE", "gender"] <- "M"
+mental.health[mental.health$gender == "Man", "gender"] <- "M"
+mental.health[mental.health$gender == "man", "gender"] <- "M"
+mental.health[mental.health$gender == "m", "gender"] <- "M"
+mental.health[mental.health$gender == "man ", "gender"] <- "M"
+mental.health[mental.health$gender == "Dude", "gender"] <- "M"
+mental.health[mental.health$gender == "mail", "gender"] <- "M"
+mental.health[mental.health$gender == "M|", "gender"] <- "M"
+mental.health[mental.health$gender == "Cis male", "gender"] <- "M"
+mental.health[mental.health$gender == "Male (cis)", "gender"] <- "M"
+mental.health[mental.health$gender == "Cis Male", "gender"] <- "M"
+mental.health[mental.health$gender == "cis male", "gender"] <- "M"
+mental.health[mental.health$gender == "cisdude", "gender"] <- "M"
+mental.health[mental.health$gender == "cis man", "gender"] <- "M"
+mental.health[mental.health$gender == "Male.", "gender"] <- "M"
+mental.health[mental.health$gender == "Male ", "gender"] <- "M"
+mental.health[mental.health$gender == "male ", "gender"] <- "M"
+mental.health[mental.health$gender == "Malr", "gender"] <- "M"
+mental.health[841,"gender"] <- "M"
+
+mental.health[mental.health$gender == "Female", "gender"] <- "F"
+mental.health[mental.health$gender == "Female ", "gender"] <- "F"
+mental.health[mental.health$gender == " Female", "gender"] <- "F"
+mental.health[mental.health$gender == "female", "gender"] <- "F"
+mental.health[mental.health$gender == "female ", "gender"] <- "F"
+mental.health[mental.health$gender == "Woman", "gender"] <- "F"
+mental.health[mental.health$gender == "woman", "gender"] <- "F"
+mental.health[mental.health$gender == "f", "gender"] <- "F"
+mental.health[mental.health$gender == "Cis female", "gender"] <- "F"
+mental.health[mental.health$gender == "Cis female ", "gender"] <- "F"
+mental.health[mental.health$gender == "Cisgender Female", "gender"] <- "F"
+mental.health[mental.health$gender == "Cis-woman", "gender"] <- "F"
+mental.health[mental.health$gender == "fem", "gender"] <- "F"
+mental.health[1091, "gender"] <- "F"
+mental.health[17, "gender"] <- "F"
+
+# gender queer (GQ)
+mental.health[mental.health$gender == "Agender", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Androgynous", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Bigender", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Female or Multi-Gender Femme", "gender"] <- "GQ"
+mental.health[mental.health$gender == "female-bodied; no feelings about gender", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Fluid", "gender"] <- "GQ"
+mental.health[mental.health$gender == "fm", "gender"] <- "GQ"
+mental.health[mental.health$gender == "GenderFluid", "gender"] <- "GQ"
+mental.health[mental.health$gender == "GenderFluid (born female)", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Genderflux demi-girl", "gender"] <- "GQ"
+mental.health[mental.health$gender == "genderqueer", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Genderqueer", "gender"] <- "GQ"
+mental.health[mental.health$gender == "fm", "gender"] <- "GQ"
+mental.health[mental.health$gender == "genderqueer woman", "gender"] <- "GQ"
+mental.health[mental.health$gender == "human", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Human", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Unicorn", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Male/genderqueer", "gender"] <- "GQ"
+mental.health[mental.health$gender == "nb masculine", "gender"] <- "GQ"
+mental.health[mental.health$gender == "non-binary", "gender"] <- "GQ"
+mental.health[mental.health$gender == "Nonbinary", "gender"] <- "GQ"
+mental.health[mental.health$gender == "AFAB", "gender"] <- "GQ"
+
+# transgender (TG)
+mental.health[mental.health$gender == "Male (trans, FtM)", "gender"] <- "TG"
+mental.health[mental.health$gender == "Transgender woman", "gender"] <- "TG"
+
+# see what's left
+index <- which(mental.health$gender != "M" & mental.health$gender != "F" & mental.health$gender != "GQ" & mental.health$gender != "TG")
+
+mental.health[index, "gender"]
+
+# create vector of final gender values to fill in based on index
+last.genders <- c("F", "TG", "GQ", "GQ", "F", "GQ", "GQ", "GQ", "M", "Refused", "GQ", "GQ", "GQ", "TG", "GQ", NA)
+
+# fill in remaining values
+mental.health[index, "gender"] <- last.genders
+
+# check gender
+table(mental.health$gender)
+
+# convert gender back to factor
+mental.health$gender <- as.factor(mental.health$gender)
+
+```
+## Exploratory Data Analysis
+
+### How many respondents with a tech role have ever been diagnosed with a mental disorder?
+
+To answer this question, I will restrict myself to only those respondents who have provided an answer to the question, *Is your primary role within your company related to tech/IT?*
+
+```{r explore1, fig.width = 6}
+
+# exclude NA responses in the tech.role variable
+tekkies <- mental.health %>% filter(!is.na(tech.role)) 
+
+#how many respondents total?
+nrow(tekkies)
+
+# how many tech workers?
+nrow(tekkies[tekkies$tech.role == "Yes", ])
+
+# get only tech workers
+tekkies <- tekkies[tekkies$tech.role == "Yes", ]
+
+# what is the gender breakdown?
+table(tekkies$gender)
+
+#group by variables of interest
+tekkies.grouped <- tekkies %>% group_by(gender, ever.had.mental.disorder)
+
+# plot counts
+ggplot(tekkies, aes(ever.had.mental.disorder)) + geom_bar() + facet_wrap(~gender, scales = "free_y") +
+        ggtitle("Raw counts of tech role workers with previous diagnosis of mental\n disorder") +
+        xlab("Ever diagnosed with mental disorder?") +
+        theme_bw()
+
+## create summary of counts and relative frequencies for each class
+forPlotting <- tekkies.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# show frequencies
+forPlotting
+
+# remove the one TG, one NA and 4 GQ respondents
+tekkies.grouped <- tekkies %>% filter(gender != "TG", gender != "NA", gender != "GQ") %>% group_by(gender, ever.had.mental.disorder)
+
+## create updated summary of counts and relative frequencies for each class
+forPlotting <- tekkies.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# plot relative frequencies with a stacked bar plot 
+gg <- ggplot(forPlotting, aes(x = gender, y = freq, fill = ever.had.mental.disorder)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("Tech role workers with previous diagnosis of mental disorder") +
+         xlab("Gender") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+```
+
+The first thing to note is that many of the survey respondents did not provide an answer to the question, *"Is your primary role within your company related to tech/IT?"*. In fact, out of `1433` total respondents, only `263` provided a response, while `1170` respondents left this field empty. As I found this to be out of the ordinary, I checked the survey online. It appears that this question is no longer present in the current form the survey, which would explain the large number of missing data.
+
+Perhaps unsurprisingly, there are roughly three times more male (`182`) than female (`60`) respondents in this restricted dataset (tech role only). However, there is a higher proportion of female respondents who have had a diagnosis of a mental health disorder (roughly `63%` vs `46%`, respectively). The reasons for this are not clear, but it could be that men are less likely to seek out professional medical assistance as it pertains to mental health issues and therefore would have a lower frequency of medically diagnosed mental health disorders. 
+
+Lastly, of the four respondents who identified as being `GQ` or Gender Queer, all had been diagnosed with a mental health disorder in the past, while the single `TG` (transgender) respondent had no past diagnosis of a mental health disorder.
+
+### How many respondents with a tech role currently have a mental disorder?
+To answer this question, I will use the same subset of data that I used above.
+
+```{r current-mental-disorder, fig.width = 6}
+# quick count
+table(tekkies$currently.have.mental.disorder)
+
+# group by variables of interest
+tekkies.grouped <- tekkies %>% group_by(gender, currently.have.mental.disorder)
+
+# create summary of counts and relative frequencies for each class
+forPlotting <- tekkies.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# show updated frequencies
+forPlotting
+
+# remove the one TG, one NA and 4 GQ respondents
+tekkies.grouped <- tekkies %>% filter(gender != "TG", gender != "NA", gender != "GQ") %>% group_by(gender, currently.have.mental.disorder)
+
+## create updated summary of counts and relative frequencies for each class
+forPlotting <- tekkies.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# plot relative frequencies with a stacked bar plot filled by current diagnosis
+gg <- ggplot(forPlotting, aes(x = gender, y = freq, fill = currently.have.mental.disorder)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("Female tech workers have higher incidence of mental health disorders") +
+         xlab("Gender") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+
+```
+
+As was the case with having previous history of mental disorder, we see similar trends in those who currently have a mental health disorder. Roughly `52%` of female respondents indicated they are currently suffering from a mental health disorder, in contrast to only `34%` of male respondents. However, there are more male respondents who indicated that they "maybe" have a mental disorder than female respondents (`25%` versus `17%`, respectively).
+
+### How many of the total survey respondents *currently* suffer from a mental health disorder?
+
+As it appears that the majority of survey respondents did not receive the question, *"Is your primary role within your company related to tech/IT?"*, I will now focus the remainder of the analyses using the full set of respondents. 
+
+```{r total_survey, fig.width = 8}
+# quick table count
+table(mental.health$currently.have.mental.disorder)
+
+# group the data
+all <- mental.health %>%  group_by(gender, currently.have.mental.disorder)
+
+# calculate frequencies
+forPlotting <- all %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# show freqs
+forPlotting
+
+# remove Refused and NA respondents and regroup data
+all <- mental.health %>% filter(gender != "NA", gender != "Refused") %>% 
+        group_by(gender, currently.have.mental.disorder)
+
+# recalculate frequencies
+forPlotting <- all %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# plot relative frequencies with a stacked bar plot filled by current diagnosis
+gg <- ggplot(forPlotting, aes(x = gender, y = freq, fill = currently.have.mental.disorder)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("Gender Queer and Female respondents have higher incidence of mental health disorders\n") +
+         xlab("Gender") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+```
+
+First, let us note while the `TG` frequency of `Yes` is `100%`, bear in mind there are only four total `TG` respondents in the entire survey. With more data, it is likely this frequency will change.
+
+Interestingly, among the respondents who consider themselves `GQ`, `67%` currently have a mental health disorder, higher than either males or females. As was observed in the tech worker subset of the data, there are more females (`54%`) than males (`35%`) who currently have a mental health disorder.
+
+### How does self-employment relate to respondents currently having a mental disorder?
+
+```{r self-employment}
+# check entire survey
+all <- mental.health %>% group_by(self.employed, currently.have.mental.disorder)
+
+# calculate frequencies
+forPlotting <- all %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# show freqs
+forPlotting
+
+# plot relative frequencies with a stacked bar plot filled by current diagnosis
+gg <- ggplot(forPlotting, aes(x = self.employed, y = freq, fill = currently.have.mental.disorder)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("Self-employed respondents appear more likely to suffer from mental illness") +
+         xlab("Self-employment status") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+
+# Are the differences in proportions statistically significant?
+# Ho: There is no difference in proportion of mental health disorders among the self- and non-self-employed
+# Ha: There is some difference in proportion of mental health disorders among the self- and non-self-employed
+chisq.test(table(all$self.employed, all$currently.have.mental.disorder))
+```
+
+From a survey-wide standpoint, it appears that those who are self-employed have a slightly higher incidence of of a mental health disorder (`43%`) versus those who are not self-employed (`39%`). However, according to the results of a ChiSquare test of independence, we fail to reject the null hypothesis of no difference among the self and non-self employed groups in the population at large. That being said, it should be noted that we failed to reject the null hypothesis of no difference by a small margin ($p = 0.07937$).
+
+### How is age associated with respondent's comfort to discuss mental illness with supervisor and coworkers?
+```{r age}
+# first, what is the distribution of ages?
+summary(mental.health$age)
+```
+
+Okay.. It's very unlikely that a 3 year-old and 323 year-old completed this survey. I will impute these ages with the median value of `33`. 
+
+```{r age_impute}
+# impute the incorrect ages with median age of 33
+mental.health[which(mental.health$age == 3), "age"] <- 33
+mental.health[which(mental.health$age == 323), "age"] <- 33
+
+# check
+summary(mental.health$age)
+```
+
+We still have some issues with age. There's a respondent who answered `99`. Let's explore age graphically.
+
+```{r age_graph}
+# plot ages
+gg <- ggplot(mental.health, aes(age)) + geom_histogram() +
+        ggtitle("Distribution of ages among all respondents") +
+        theme_bw()
+        
+ggplotly(gg)
+```
+
+Although possible, it is unlikely that a 99 year-old would still be working and not enjoying the golden years of their life. Therefore, I will replace this age with the median.
+
+```{r age_impute_continued}
+# fix last age
+mental.health[which(mental.health$age == 99), "age"] <- 33
+
+# how does age relate to comfort with discussing mental health issues with supervisor?
+non.empty.response <- mental.health %>% filter(mental.health.comfort.supervisor != "")
+
+# plot
+gg <- ggplot(non.empty.response, aes(x = mental.health.comfort.supervisor, y = age)) + 
+        geom_boxplot() +
+        ggtitle("No age differences according to comfort with supervisor") +
+        xlab("comfort with supervisor") +
+        ylab("age") +
+        scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+        theme_bw()
+
+ggplotly(gg)
+
+# Are there differences in ages according to comfort discussing mental illness with supervisor?
+av <- aov(non.empty.response$age ~ non.empty.response$mental.health.comfort.supervisor)
+summary(av)
+
+# how does age relate to comfort with discussing mental health issues with coworkers?
+non.empty.response.co <- mental.health %>% filter(mental.health.comfort.coworker != "")
+
+# plot
+gg <- ggplot(non.empty.response.co, aes(x = mental.health.comfort.coworker, y = age)) + 
+        geom_boxplot() +
+        ggtitle("No age differences according to comfort with coworkers") +
+        xlab("comfort with coworkers") +
+        ylab("age") +
+        scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+        theme_bw()
+
+ggplotly(gg)
+
+# Are there differences in ages according to comfort discussing mental illness with coworkers?
+av <- aov(non.empty.response.co$age ~ non.empty.response.co$mental.health.comfort.supervisor)
+summary(av)
+```
+
+According to the plots and ANOVA results above, there are no significant differences in ages by level of comfort in discussing mental health issues with either supervisors or coworkers. This means that developing targeted mental health wellness outreach programs based on age may be unnecessary.
+
+### How does size of company relate to incidence of mental health disorders?
+
+To answer this question, I will restrict the data to only those survey respondents who have answered the survey question:
+"Has your employer ever formally discussed mental health (for example, as part of a wellness campaign or other official communication)?"
+
+```{r size_of_company}
+# quick summary of number of employees breakdown
+summary(mental.health$num.employees)
+```
+
+As we can see, we have a lot of missing data (`287`). Otherwise, the breakdown looks fairly homogenous, with the fewest survey respondents belonging to companies with 5 or less people ). 
+
+```{r size_of_company_and_mental_health}
+# get only respondents who have answer the question
+size.company <- mental.health %>% filter(num.employees != "")
+
+# order levels of factor to be in ascending order
+size.company$num.employees <- factor(size.company$num.employees, levels = c("1-5", "6-25", "26-100", "100-500", "500-1000", "More than 1000"))
+
+# group by variables of interest
+size.company.grouped <- size.company %>% group_by(num.employees, currently.have.mental.disorder)
+
+# calculate frequencies
+forPlotting <- size.company.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# show freqs
+#forPlotting
+
+# plot relative frequencies with a stacked bar plot filled by current diagnosis
+gg <- ggplot(forPlotting, aes(x = num.employees, y = freq, fill = currently.have.mental.disorder)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("No relationship between company size and incidence of mental disorders") +
+         xlab("Company size (number of employees)") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+
+# Are the differences in proportions statistically significant?
+# Ho: There is no difference in proportion of mental health disorders dependent on company size
+# Ha: There is some difference in proportion of mental health disorders dependent on company size
+chisq.test(table(size.company$num.employees, size.company$currently.have.mental.disorder))
+```
+
+Given the data we have, we fail to reject the null hypothesis of no difference between the proportions of mental health disorders and company size. In other words, company size is not significantly associated with a diagnosis of a mental health disorder.
+
+### How does size of company relate to an employer formally discussing mental health?
+
+Or, in other words: Are smaller or larger companies more likely to formally discuss mental health issues?
+
+To answer this question, I will use a similar approach as above.
+
+```{r company_size_and_formal_discussion}
+# quick summary
+summary(size.company$mental.health.formally.discussed)
+
+# fix empty level issue
+size.company$mental.health.formally.discussed <- droplevels(size.company$mental.health.formally.discussed)
+
+# group by variables of interest
+size.company.grouped <- size.company %>% group_by(num.employees, mental.health.formally.discussed)
+
+# calculate frequencies
+forPlotting <- size.company.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# show freqs
+#forPlotting
+
+# plot relative frequencies with a stacked bar plot filled by current diagnosis
+gg <- ggplot(forPlotting, aes(x = num.employees, y = freq, fill = mental.health.formally.discussed)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("Larger companies formally discuss mental health issues more") +
+         xlab("Company size (number of employees)") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+
+# Are the differences in proportions statistically significant?
+# Ho: There is no difference in proportion of mental health being formally discussed being dependent on company size
+# Ha: There is some difference in proportion of mental health being formally discussed being dependent on company size
+
+chisq.test(table(size.company$num.employees, size.company$mental.health.formally.discussed))
+```
+
+Based on the data above, we have sufficient evidence to reject the null hypothesis of formal discussion of mental health issues and company size being independent. The data suggest that larger companies (greater than 500 employees) tend to have formal discussions/policies about mental health in place.
+
+### How does size of company relate to employer's taking mental health issues seriously?
+
+Do larger companies tend to take mental health more seriously?
+
+```{r company_size_and_taken_seriously}
+# quick summary
+table(size.company$mental.health.taken.seriously)
+
+# fix empty level issue
+size.company$mental.health.taken.seriously <- droplevels(size.company$mental.health.taken.seriously)
+
+# group by variables of interest
+size.company.grouped <- size.company %>% group_by(num.employees, mental.health.taken.seriously)
+
+# calculate frequencies
+forPlotting <- size.company.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n))
+
+# show freqs
+#forPlotting
+
+# plot relative frequencies with a stacked bar plot filled by mental.health.taken.seriously
+gg <- ggplot(forPlotting, aes(x = num.employees, y = freq, fill = mental.health.taken.seriously)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("Companies with more than 1000 employees take mental health less seriously") +
+         xlab("Company size (number of employees)") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+
+# Are the differences in proportions statistically significant?
+# Ho: There is no difference in proportion of mental health taken seriously being dependent on company size
+# Ha: There is some difference in proportion of mental health taken seriously being dependent on company size
+
+chisq.test(table(size.company$num.employees, size.company$mental.health.taken.seriously))
+```
+
+Surprisingly, even though the largest companies have the highest proportion of survey respondents indicating that there are formal discussions of mental health taking place at their companies, the largest companies have the lowest proportion of survey respondents indicating that their companies take mental health issues seriously. Regarding the ChiSquare test of independence, we have convincing evidence to reject the null hypothesis of independence between company size and taking mental health seriously.
+
+### How does specific work position relate to incidence of mental health disorder?
+
+To answer this question, I will limit the dataset to only a few discrete categories of work position. Note that in the survey, respondents could select multiple answers to describe their roles. I have decided to focus on single answer choices, such as:
+
+1. Back-end Developer
+2. Front-end Developer
+3. DevOps/SysAdmin
+4. Supervisor/Team Lead
+5. Support
+6. Designer
+
+```{r work-position, fig.width = 10}
+# group by variables of interest
+workpo.grouped <- mental.health %>% filter(work.position == "Back-end Developer" | work.position == "Front-end Developer" | work.position == "DevOps/SysAdmin" | work.position == "Supervisor/Team Lead" | work.position == "Support" | work.position == "Designer") %>% group_by(work.position, currently.have.mental.disorder)
+
+# calculate frequencies
+forPlotting <- workpo.grouped %>%
+        summarise(n = n()) %>%
+        mutate(freq = n / sum(n)) 
+
+# show frequencies        
+forPlotting
+
+gg <- ggplot(forPlotting, aes(x = work.position, y = freq, fill = currently.have.mental.disorder)) + 
+        geom_bar(stat = "identity") +
+         ggtitle("Designers have the highest incidence of mental health disorders") +
+         xlab("Work position") +
+         ylab("Relative frequency") +
+         guides(fill=guide_legend(title=NULL)) +
+         theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+         scale_fill_manual(values=wes_palette(n=3, name="GrandBudapest2")) +
+         theme_bw()
+
+ggplotly(gg)
+
+```
+
+Interestingly, Designers have the highest incidence of respondents (17/28) currently diagnosed with a mental disorder at roughly `61%`, whereas Front-end Developers have the lowest incidence, at `36%`. 
+
+
+## Final remarks
+
+Here I have performed a cursory exploratory data analysis in an attempt to gain some insight into the incidence of mental health/illness in the tech workplace based on the [Open Sourcing Mental Illess (OSMI)](https://osmihelp.org) ongoing survey, which started back in 2016. 
+
+Based the exploratory analysis conducted, there were several potentially interesting considerations/findings:
+
+1. Having an open-ended survey question related to gender led to a minor data-cleaning headache. While I do understand the motivation behind leaving this survey question free-form, perhaps providing a handful of choices (e.g. "Male", "Female", "Non-binary/Gender Queer", "Transgender" and so on) would mitigate the huge diversity of answers, some of which included entire sentences.  
+
+2. For whatever reason, at least one of the survey questions ("Is your primary role within your company related to tech/IT") was removed from the survey, leading to a large number of missing data (roughly `82%`) for this variable. Nevertheless, in the subset of data corresponding to those with a tech role ($n = 248$), we observed that:
+
+    * Female respondents have a higher incidence of a medically diagnosed mental health disorder in their past (`63%` females vs `46%` males)
+    * Female respondents also have a higher incidence of currently being diagnosed with a mental health disorder (`52%` females vs `34%` males)
+  
+The reasons for these differences between males and females are unclear, but it can be speculated that males could be less willing to admit to having issues with their mental health and/or could be reluctant to see a psychiatrist, given the larger proportion of males who were unsure if they have a mental disorder or not (`25%` males vs `17%` females)
+
+3. Considering the entire set of respondents ($n = 1433$), we observed that Gender Queer and Female respondents have a higher incidence of currently having a mental disorder (`67%` Gender Queer and `54%` Female), while all 4 Transgender respondents currently have a mental health disorder. Survey-wide, males have the lowest frequency of currently having a mental disorder (`35%`)
+
+4. Self-employed respondents are slightly more likely to currently have a mental disorder, but this difference was not found to be statistically significant. 
+
+5. A respondent's age appears to not have any influence on their level of comfort in discussing mental health issues with their supervisors or co-workers. Median age of respondents is 33 years.
+
+6. With the current data, company size and incidence of mental health disorders appear to be independent. 
+
+7. Larger companies tend to formally discuss mental health issues more, i.e. perhaps they have formal policies in place;  however, companies with more than 1000 employees take mental health less seriously. Therefore, it is likely that working with larger companies to improve their handling of mental health issues could be a priority.
+
+8. Designers have the highest incidence of mental health disorders at `61%`, followed by those in a Support role (`50%`). Front-end Developers have the lowest incidence of mental health disorders at `36%`.
+
+I hope that these insights can be considered useful in some way. It would be nice to continue exploring the data and working with some of the other variables, and even building some sort of model to predict the incidence of mental health disorders. Unfortunately, I will have to cut my analysis off here due to time constraints!
+
+Thank you!
+
+Feel free to reach me at [dalesan@gmail.com](dalesan@gmail.com) with any questions. I will place all my files into a github repository soon. 
+
+
